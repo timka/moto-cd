@@ -1,1 +1,0 @@
-auto-cd.zsh
