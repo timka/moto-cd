@@ -1,6 +1,6 @@
 # Moto-cd
 
-Moto-cd is a slightly modified version of https://github.com/andreaconti/auto-cd made just for fun.
+Moto-cd (multi-auto-cd) is a slightly modified version of https://github.com/andreaconti/auto-cd made just for fun.
 
 -----------------------------
 
