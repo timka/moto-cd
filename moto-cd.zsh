@@ -18,6 +18,11 @@ if (( ! ${+MOTO_CD_FILE} )); then
     MOTO_CD_FILE="$HOME/.last_cd"
 fi
 
+# Prepend $HOME if relative path
+[ "${MOTO_CD_FILE:0:1}" == "/" ] ||  {
+    MOTO_CD_FILE="$HOME/$MOTO_CD_FILE"
+}
+
 # change directory
 
 {
