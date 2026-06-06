@@ -1,68 +1,64 @@
 #!/usr/bin/env zsh
 
-# FLAGS
+: ${MOTO_CD_CHPWD:=true}
+: ${MOTO_CD_HOME:=$HOME}
+: ${MOTO_CD_NO_AUTO_LS:=false}
+: ${MOTO_CD_FILE:="$HOME/.last_cd"}
 
-if (( ! ${+MOTO_CD_CHPWD} )); then
-    MOTO_CD_CHPWD=true
-fi
+# Convert to absolute path if it is relative
+[[ "$MOTO_CD_FILE" != /* ]] && MOTO_CD_FILE="$HOME/$MOTO_CD_FILE"
 
-if (( ! ${+MOTO_CD_HOME} )); then
-    MOTO_CD_HOME=$HOME
-fi
+_moto_cd_restore() {
+    # Remove itself from the precmd hook to avoid slowing down every subsequent prompt
+    add-zsh-hook -D precmd _moto_cd_restore
 
-if (( ! ${+MOTO_CD_NO_AUTO_LS} )); then
-    MOTO_CD_NO_AUTO_LS=false
-fi
-
-if (( ! ${+MOTO_CD_FILE} )); then
-    MOTO_CD_FILE="$HOME/.last_cd"
-fi
-
-# Prepend $HOME if relative path
-[ "${MOTO_CD_FILE:0:1}" = "/" ] ||  {
-    MOTO_CD_FILE="$HOME/$MOTO_CD_FILE"
-}
-
-# change directory
-
-{
-    # disable auto-ls if needed
-    if [ $MOTO_CD_NO_AUTO_LS = true ]; then
-        moto_ls_index=${chpwd_functions[(I)auto-lss]}
-        if [[ $moto_ls_index != 0 ]]; then
-            to_remove=auto-lss
-            chpwd_functions=("${chpwd_functions[@]/$to_remove}")
-        fi
-    fi
-
-    # source and change dir
+    local target_dir=""
     if [[ -f "$MOTO_CD_FILE" ]]; then
-        OLD_PATH=$(cat "$MOTO_CD_FILE")
-        cd "$OLD_PATH"
+        # $(<file) reads the file directly via Zsh, which is faster and safer than cat.
+        # It automatically strips leading/trailing whitespace and newlines.
+        target_dir=$(<"$MOTO_CD_FILE")
     else
-        cd "$MOTO_CD_HOME"
+        target_dir="$MOTO_CD_HOME"
     fi
-} always {
 
-    # check auto-ls
-    if [[ $MOTO_CD_NO_AUTO_LS -eq true ]]; then
-        if [[ $moto_ls_index != 0 ]]; then
-            chpwd_functions+=(auto-lss)
+    # Check if the directory exists and we are not already in it
+    if [[ -d "$target_dir" && "$PWD" != "$target_dir" ]]; then
+
+        local ls_disabled=false
+        local ls_index=${chpwd_functions[(I)auto-lss]}
+
+        # Temporarily disable auto-lss if needed (safe removal by index)
+        if [[ "$MOTO_CD_NO_AUTO_LS" == true && $ls_index -ne 0 ]]; then
+            chpwd_functions[$ls_index]=()
+            ls_disabled=true
+        fi
+
+        # Execute cd. By this time, direnv and zsh-autoenv are fully ready
+        # and will correctly react to this event via their chpwd hooks.
+        cd "$target_dir" || return
+
+        # Return auto-lss to the end of the hooks array
+        if [[ "$ls_disabled" == true ]]; then
+            chpwd_functions+=("auto-lss")
         fi
     fi
-
-
 }
 
-# functions
-
-function moto-cd-init-cd {
-    CURR_PWD=$(pwd)
-    echo "$CURR_PWD" > "$MOTO_CD_FILE"
+moto-cd-init-cd() {
+    # $PWD is more reliable and faster than $(pwd).
+    # print -r -- protects against special character interpretation.
+    print -r -- "$PWD" > "$MOTO_CD_FILE"
 }
 
-# append hook function
+# Ensure add-zsh-hook is available
+autoload -Uz add-zsh-hook
 
-if [[ ${MOTO_CD_CHPWD} == true && ${chpwd_functions[(I)moto-cd-init-cd]} -eq 0 ]]; then
-    chpwd_functions+=(moto-cd-init-cd)
+# Register deferred restoration at startup
+add-zsh-hook precmd _moto_cd_restore
+
+# Register saving on every directory change
+if [[ "$MOTO_CD_CHPWD" == true ]]; then
+    if [[ ${chpwd_functions[(I)moto-cd-init-cd]} -eq 0 ]]; then
+        chpwd_functions+=(moto-cd-init-cd)
+    fi
 fi
